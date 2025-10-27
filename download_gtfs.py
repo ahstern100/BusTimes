@@ -1,57 +1,69 @@
-name: Daily GTFS Fetch and Schedule Generation
+import requests
+import os
+from datetime import datetime
+import gtfs_parser # ייבוא הקובץ החדש
 
-on:
-  # הרצה יומית בשעה 03:00 UTC (06:00 או 05:00 בוקר בישראל)
-  schedule:
-    - cron: '0 3 * * *'
-  # מאפשר הרצה ידנית מהממשק הגרפי
-  workflow_dispatch:
+# כתובת ה-URL לקובץ ה-GTFS (יש לוודא שהיא עדכנית!)
+GTFS_URL = "https://gtfs.mot.gov.il/gtfsfiles/gtfs.zip"
+OUTPUT_FILENAME = "gtfs.zip"
+OUTPUT_SCHEDULE_FILENAME = "schedule.txt"
 
-jobs:
-  fetch_and_commit:
-    # ודא כי הרפוזיטורי הוא BusTimes
-    name: Running on BusTimes
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository code
-        # מוריד את הקוד של הרפוזיטורי
-        uses: actions/checkout@v4
-        with:
-          # חיוני כדי לאפשר לקוד לבצע Commit חדש
-          token: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Set up Python
-        # הגדרת סביבת Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10' # משתמשים בגרסה יציבה
-          
-      - name: Install dependencies (requests and pandas)
-        # התקנת ספריות Python הנדרשות
-        run: |
-          echo "DEBUG: Installing requests and pandas..."
-          pip install requests pandas
-          echo "DEBUG: Installation complete."
+def download_file(url, filename):
+    """מוריד קובץ מ-URL ושומר אותו."""
+    print("--- Starting GTFS Download Process ---")
+    print(f"DEBUG: Target URL: {url}")
+    print(f"DEBUG: Output file name: {filename}")
+    
+    try:
+        # שליחת בקשת HTTP
+        response = requests.get(url, stream=True)
+        response.raise_for_status() # זורק שגיאה אם הבקשה נכשלה
 
-      - name: Run GTFS Download and Parsing Script
-        # מריץ את קובץ הראשי שלנו
-        id: run_script
-        run: |
-          echo "DEBUG: Starting download_gtfs.py..."
-          python download_gtfs.py
-          echo "DEBUG: Script finished."
-      
-      - name: Commit files if changed (GTFS.zip and schedule.txt)
-        # משתמש ב-Action של צד שלישי לביצוע Add ו-Commit
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: ${{ steps.run_script.outputs.commit_message }}
-          # קבלת רשימת הקבצים ל-Commit מקובץ הפייתון
-          files: ${{ steps.run_script.outputs.files_to_commit }}
-          # מאפשר ריצה אוטומטית גם אם אין שינויים (כדי לא לשבור את ה-workflow)
-          commit_options: '--allow-empty'
-          skip_dirty_check: true # דילוג על בדיקה כדי לוודא שאין תקיעות
-          
-      - name: Final Success Check
-        if: success()
-        run: echo "SUCCESS: Action completed. Check the 'BusTimes' repository for the updated files."
+        # שמירת הקובץ
+        with open(filename, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        print(f"SUCCESS: File downloaded and saved as {filename}.")
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR: Failed during download: {e}")
+        return False
+    finally:
+        print("--- GTFS Download Process Finished ---")
+
+if __name__ == '__main__':
+    if download_file(GTFS_URL, OUTPUT_FILENAME):
+        
+        # --- שלב חדש: הפעלת קובץ הניתוח ---
+        print("\n--- Starting GTFS Parsing and Schedule Generation ---")
+        try:
+            gtfs_parser.generate_schedule(OUTPUT_FILENAME, OUTPUT_SCHEDULE_FILENAME)
+            print("SUCCESS: Schedule generated.")
+        except Exception as e:
+            print(f"CRITICAL ERROR: Failed to run gtfs_parser: {e}")
+        finally:
+            print("--- GTFS Parsing Process Finished ---")
+
+        # --- התיקון המהותי: שימוש ב-GITHUB_OUTPUT לפתרון שגיאת ה-YAML ---
+        
+        # 1. יצירת המשתנים
+        commit_msg = f"GTFS and Schedule Update for {datetime.now().strftime('%Y-%m-%d')}"
+        files_to_commit = f"{OUTPUT_FILENAME},{OUTPUT_SCHEDULE_FILENAME}"
+        
+        # 2. כתיבה לקובץ המשתנים של GitHub Action
+        # משתנה הסביבה GITHUB_OUTPUT מכיל את הנתיב לקובץ אליו יש לכתוב
+        github_output_path = os.environ.get('GITHUB_OUTPUT')
+        
+        if github_output_path:
+            print("DEBUG: Setting GitHub Action output variables using GITHUB_OUTPUT.")
+            try:
+                with open(github_output_path, 'a') as f:
+                    # כתיבה בפורמט החדש: name=value
+                    f.write(f"commit_message={commit_msg}\n")
+                    f.write(f"files_to_commit={files_to_commit}\n")
+                print("DEBUG: Output variables successfully set.")
+            except Exception as e:
+                 print(f"ERROR: Failed to write to GITHUB_OUTPUT file: {e}")
+        else:
+            print("WARNING: GITHUB_OUTPUT environment variable not found. Skipping output variable setting.")
