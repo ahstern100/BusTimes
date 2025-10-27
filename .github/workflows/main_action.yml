@@ -34,24 +34,39 @@ jobs:
           echo "DEBUG: Installation complete."
 
       - name: Run GTFS Download and Parsing Script
-        # מריץ את קובץ הראשי שלנו
+        # *** זהו הבלוק שתוקן כדי ללכוד את הפלט של הפייתון ***
         id: run_script
         run: |
           echo "DEBUG: Starting download_gtfs.py..."
-          python download_gtfs.py
+          # הרצת הפייתון ולכידת כל הפלט
+          OUTPUT=$(python download_gtfs.py)
+          
+          # הדפסת כל הפלט הרגיל של הפייתון
+          echo "$OUTPUT"
           echo "DEBUG: Script finished."
+
+          # חילוץ המשתנים ACTION_OUTPUT_COMMIT_MESSAGE ו-ACTION_OUTPUT_FILES_TO_COMMIT
+          COMMIT_MSG=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_COMMIT_MESSAGE:' | sed 's/ACTION_OUTPUT_COMMIT_MESSAGE://')
+          FILES_TO_COMMIT=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_FILES_TO_COMMIT:' | sed 's/ACTION_OUTPUT_FILES_TO_COMMIT://')
+          
+          # הגדרת משתני הפלט של ה-Step באמצעות התחביר הישן (שעדיין נתמך במקרים רבים)
+          # או באמצעות התחביר המודרני ל-bash
+          # הדרך הנכונה המודרנית (כתיבה לקובץ):
+          echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "files_to_commit=$FILES_TO_COMMIT" >> $GITHUB_OUTPUT
+          
+          echo "DEBUG: Commit message extracted: $COMMIT_MSG"
+          echo "DEBUG: Files to commit extracted: $FILES_TO_COMMIT"
       
       - name: Commit files if changed (GTFS.zip and schedule.txt)
         # משתמש ב-Action של צד שלישי לביצוע Add ו-Commit
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
+          # קורא את הפלט שהוגדר בשלב הקודם
           commit_message: ${{ steps.run_script.outputs.commit_message }}
-          # קבלת רשימת הקבצים ל-Commit מקובץ הפייתון
           files: ${{ steps.run_script.outputs.files_to_commit }}
-          # מאפשר ריצה אוטומטית גם אם אין שינויים (כדי לא לשבור את ה-workflow)
           commit_options: '--allow-empty'
-          skip_dirty_check: true # דילוג על בדיקה כדי לוודא שאין תקיעות
+          skip_dirty_check: true 
           
       - name: Final Success Check
-        if: success()
         run: echo "SUCCESS - Action completed. Check the 'BusTimes' repository for the updated files."
