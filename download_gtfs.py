@@ -2,22 +2,29 @@ import requests
 import os
 from datetime import datetime
 import gtfs_parser 
+import urllib3 # נדרש כדי לדכא את אזהרות SSL
 
+# --- הגדרות ---
 # כתובת ה-URL לקובץ ה-GTFS (יש לוודא שהיא עדכנית!)
 GTFS_URL = "https://gtfs.mot.gov.il/gtfsfiles/gtfs.zip"
 OUTPUT_FILENAME = "gtfs.zip"
 OUTPUT_SCHEDULE_FILENAME = "schedule.txt"
 
+# דוחה אזהרות SSL שמופיעות כאשר משתמשים ב-verify=False
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# ---------------
+
+
 def download_file(url, filename):
-    """מוריד קובץ מ-URL ושומר אותו."""
+    """מוריד קובץ מ-URL ושומר אותו, עם כיבוי אימות SSL."""
     print("--- Starting GTFS Download Process ---")
     print(f"DEBUG: Target URL: {url}")
     print(f"DEBUG: Output file name: {filename}")
     
     try:
-        # שליחת בקשת HTTP
-        response = requests.get(url, stream=True)
-        response.raise_for_status() # זורק שגיאה אם הבקשה נכשלה
+        # שליחת בקשת HTTP עם ביטול אימות SSL/TLS
+        response = requests.get(url, stream=True, verify=False)
+        response.raise_for_status() # זורק שגיאה אם הבקשה נכשלה (קוד 4xx או 5xx)
 
         # שמירת הקובץ
         with open(filename, 'wb') as f:
@@ -27,6 +34,7 @@ def download_file(url, filename):
         print(f"SUCCESS: File downloaded and saved as {filename}.")
         return True
     except requests.exceptions.RequestException as e:
+        # אם השגיאה נותרה: SSL/Max retries
         print(f"ERROR: Failed during download: {e}")
         return False
     finally:
@@ -47,11 +55,7 @@ if __name__ == '__main__':
             print("--- GTFS Parsing Process Finished ---")
 
         # --- הדפסת המשתנים בפורמט קבוע וקל לזיהוי ע"י ה-YAML ---
-        # שים לב: אין כאן שימוש ב-GITHUB_OUTPUT, אלא רק הדפסה רגילה.
-        # ה-YAML משתמש ב-bash כדי ללכוד את השורות הללו.
-        
         commit_msg = f"GTFS and Schedule Update for {datetime.now().strftime('%Y-%m-%d')}"
-        # הערה: זהו פורמט מופרד בפסיקים (עבור file_pattern)
         files_to_commit = f"{OUTPUT_FILENAME},{OUTPUT_SCHEDULE_FILENAME}"
         
         # הדפסה עם תחילית מזהה (ללא רווחים מיותרים!)
