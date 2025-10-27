@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies (requests and pandas)
         run: |
           echo "DEBUG: Installing requests and pandas..."
-          pip install requests pandas
+          pip install requests pandas urllib3
           echo "DEBUG: Installation complete."
 
       - name: Run GTFS Download and Parsing Script and Capture Outputs
