@@ -54,4 +54,4 @@ jobs:
           
       - name: Final Success Check
         if: success()
-        run: echo "SUCCESS: Action completed. Check the 'BusTimes' repository for the updated files."
+        run: echo "SUCCESS - Action completed. Check the 'BusTimes' repository for the updated files."
