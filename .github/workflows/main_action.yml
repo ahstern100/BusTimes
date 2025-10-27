@@ -9,62 +9,59 @@ on:
 
 jobs:
   fetch_and_commit:
-    # ודא כי הרפוזיטורי הוא BusTimes
     name: Running on BusTimes
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository code
-        # מוריד את הקוד של הרפוזיטורי
         uses: actions/checkout@v4
         with:
-          # חיוני כדי לאפשר לקוד לבצע Commit חדש
           token: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Set up Python
-        # הגדרת סביבת Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10' # משתמשים בגרסה יציבה
+          python-version: '3.10'
           
       - name: Install dependencies (requests and pandas)
-        # התקנת ספריות Python הנדרשות
         run: |
           echo "DEBUG: Installing requests and pandas..."
           pip install requests pandas
           echo "DEBUG: Installation complete."
 
-      - name: Run GTFS Download and Parsing Script
-        # *** זהו הבלוק שתוקן כדי ללכוד את הפלט של הפייתון ***
+      - name: Run GTFS Download and Parsing Script and Capture Outputs
+        # *** תיקון: הגדרת משתני פלט באמצעות GITHUB_OUTPUT כפי שתוקן קודם ***
         id: run_script
+        shell: bash
         run: |
           echo "DEBUG: Starting download_gtfs.py..."
-          # הרצת הפייתון ולכידת כל הפלט
+          # 1. הרצת הפייתון ולכידת כל הפלט
           OUTPUT=$(python download_gtfs.py)
           
-          # הדפסת כל הפלט הרגיל של הפייתון
+          # 2. הדפסת כל הפלט הרגיל של הפייתון ליומן
           echo "$OUTPUT"
           echo "DEBUG: Script finished."
 
-          # חילוץ המשתנים ACTION_OUTPUT_COMMIT_MESSAGE ו-ACTION_OUTPUT_FILES_TO_COMMIT
+          # 3. חילוץ המשתנים שהודפסו מה-Python באמצעות grep ו-sed
+          # קבלת הודעת Commit
           COMMIT_MSG=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_COMMIT_MESSAGE:' | sed 's/ACTION_OUTPUT_COMMIT_MESSAGE://')
+          # קבלת הקבצים ל-Commit (בפורמט מופרד בפסיקים)
           FILES_TO_COMMIT=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_FILES_TO_COMMIT:' | sed 's/ACTION_OUTPUT_FILES_TO_COMMIT://')
           
-          # הגדרת משתני הפלט של ה-Step באמצעות התחביר הישן (שעדיין נתמך במקרים רבים)
-          # או באמצעות התחביר המודרני ל-bash
-          # הדרך הנכונה המודרנית (כתיבה לקובץ):
+          # 4. כתיבה לקובץ GITHUB_OUTPUT (הדרך המודרנית להגדרת משתני Step Output)
           echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
-          echo "files_to_commit=$FILES_TO_COMMIT" >> $GITHUB_OUTPUT
+          # *** הערה: אנחנו מעבירים את רשימת הקבצים ל-file_pattern ***
+          echo "file_pattern=$FILES_TO_COMMIT" >> $GITHUB_OUTPUT 
           
-          echo "DEBUG: Commit message extracted: $COMMIT_MSG"
-          echo "DEBUG: Files to commit extracted: $FILES_TO_COMMIT"
+          echo "DEBUG: Commit message set: $COMMIT_MSG"
+          echo "DEBUG: File pattern set: $FILES_TO_COMMIT"
       
       - name: Commit files if changed (GTFS.zip and schedule.txt)
         # משתמש ב-Action של צד שלישי לביצוע Add ו-Commit
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          # קורא את הפלט שהוגדר בשלב הקודם
           commit_message: ${{ steps.run_script.outputs.commit_message }}
-          files: ${{ steps.run_script.outputs.files_to_commit }}
+          # *** תיקון קריטי: שינוי 'files' ל-'file_pattern' ***
+          file_pattern: ${{ steps.run_script.outputs.file_pattern }}
           commit_options: '--allow-empty'
           skip_dirty_check: true 
           
