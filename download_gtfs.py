@@ -15,9 +15,11 @@ def download_file(url, filename):
     print(f"DEBUG: Output file name: {filename}")
     
     try:
+        # שליחת בקשת HTTP
         response = requests.get(url, stream=True)
-        response.raise_for_status() 
+        response.raise_for_status() # זורק שגיאה אם הבקשה נכשלה
 
+        # שמירת הקובץ
         with open(filename, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
@@ -36,6 +38,7 @@ if __name__ == '__main__':
         # --- שלב חדש: הפעלת קובץ הניתוח ---
         print("\n--- Starting GTFS Parsing and Schedule Generation ---")
         try:
+            # הפעלת הפונקציה הראשית מקובץ gtfs_parser.py
             gtfs_parser.generate_schedule(OUTPUT_FILENAME, OUTPUT_SCHEDULE_FILENAME)
             print("SUCCESS: Schedule generated.")
         except Exception as e:
@@ -43,10 +46,14 @@ if __name__ == '__main__':
         finally:
             print("--- GTFS Parsing Process Finished ---")
 
-        # --- הגדרת המשתנים כהדפסה פשוטה לקונסולה (נשלפת על ידי ה-YAML) ---
+        # --- הדפסת המשתנים בפורמט קבוע וקל לזיהוי ע"י ה-YAML ---
+        # שים לב: אין כאן שימוש ב-GITHUB_OUTPUT, אלא רק הדפסה רגילה.
+        # ה-YAML משתמש ב-bash כדי ללכוד את השורות הללו.
+        
         commit_msg = f"GTFS and Schedule Update for {datetime.now().strftime('%Y-%m-%d')}"
+        # הערה: זהו פורמט מופרד בפסיקים (עבור file_pattern)
         files_to_commit = f"{OUTPUT_FILENAME},{OUTPUT_SCHEDULE_FILENAME}"
         
-        # הדפסת המשתנים בפורמט קבוע וקל לזיהוי
+        # הדפסה עם תחילית מזהה (ללא רווחים מיותרים!)
         print(f"ACTION_OUTPUT_COMMIT_MESSAGE:{commit_msg}")
         print(f"ACTION_OUTPUT_FILES_TO_COMMIT:{files_to_commit}")
