@@ -1,7 +1,7 @@
 import requests
 import os
 from datetime import datetime
-import gtfs_parser # ייבוא הקובץ החדש
+import gtfs_parser 
 
 # כתובת ה-URL לקובץ ה-GTFS (יש לוודא שהיא עדכנית!)
 GTFS_URL = "https://gtfs.mot.gov.il/gtfsfiles/gtfs.zip"
@@ -15,11 +15,9 @@ def download_file(url, filename):
     print(f"DEBUG: Output file name: {filename}")
     
     try:
-        # שליחת בקשת HTTP
         response = requests.get(url, stream=True)
-        response.raise_for_status() # זורק שגיאה אם הבקשה נכשלה
+        response.raise_for_status() 
 
-        # שמירת הקובץ
         with open(filename, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
@@ -45,25 +43,10 @@ if __name__ == '__main__':
         finally:
             print("--- GTFS Parsing Process Finished ---")
 
-        # --- התיקון המהותי: שימוש ב-GITHUB_OUTPUT לפתרון שגיאת ה-YAML ---
-        
-        # 1. יצירת המשתנים
+        # --- הגדרת המשתנים כהדפסה פשוטה לקונסולה (נשלפת על ידי ה-YAML) ---
         commit_msg = f"GTFS and Schedule Update for {datetime.now().strftime('%Y-%m-%d')}"
         files_to_commit = f"{OUTPUT_FILENAME},{OUTPUT_SCHEDULE_FILENAME}"
         
-        # 2. כתיבה לקובץ המשתנים של GitHub Action
-        # משתנה הסביבה GITHUB_OUTPUT מכיל את הנתיב לקובץ אליו יש לכתוב
-        github_output_path = os.environ.get('GITHUB_OUTPUT')
-        
-        if github_output_path:
-            print("DEBUG: Setting GitHub Action output variables using GITHUB_OUTPUT.")
-            try:
-                with open(github_output_path, 'a') as f:
-                    # כתיבה בפורמט החדש: name=value
-                    f.write(f"commit_message={commit_msg}\n")
-                    f.write(f"files_to_commit={files_to_commit}\n")
-                print("DEBUG: Output variables successfully set.")
-            except Exception as e:
-                 print(f"ERROR: Failed to write to GITHUB_OUTPUT file: {e}")
-        else:
-            print("WARNING: GITHUB_OUTPUT environment variable not found. Skipping output variable setting.")
+        # הדפסת המשתנים בפורמט קבוע וקל לזיהוי
+        print(f"ACTION_OUTPUT_COMMIT_MESSAGE:{commit_msg}")
+        print(f"ACTION_OUTPUT_FILES_TO_COMMIT:{files_to_commit}")
