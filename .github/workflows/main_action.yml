@@ -41,12 +41,14 @@ jobs:
           
           echo "$OUTPUT"
           echo "DEBUG: Script finished."
-
-          COMMIT_MSG=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_COMMIT_MESSAGE:' | sed 's/ACTION_OUTPUT_COMMIT_MESSAGE://')
-          FILES_TO_COMMIT=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_FILES_TO_COMMIT:' | sed 's/ACTION_OUTPUT_FILES_TO_COMMIT://')
           
+          # 3. חילוץ המשתנים שהודפסו מה-Python וניקוי רווחים מיותרים
+          COMMIT_MSG=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_COMMIT_MESSAGE:' | sed 's/ACTION_OUTPUT_COMMIT_MESSAGE://' | tr -d '\n\r' | xargs)
+          FILES_TO_COMMIT=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_FILES_TO_COMMIT:' | sed 's/ACTION_OUTPUT_FILES_TO_COMMIT://' | tr -d '\n\r' | xargs)
+          
+          # 4. כתיבה לקובץ GITHUB_OUTPUT
           echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
-          # echo "file_pattern=$FILES_TO_COMMIT" >> $GITHUB_OUTPUT
+          echo "file_pattern=$FILES_TO_COMMIT" >> $GITHUB_OUTPUT #file_pattern מקבל רווחים כמפרידים!
           
           echo "DEBUG: Commit message set: $COMMIT_MSG"
           echo "DEBUG: File pattern set: $FILES_TO_COMMIT"
