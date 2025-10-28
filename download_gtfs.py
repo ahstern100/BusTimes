@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
         # --- הדפסת המשתנים בפורמט קבוע וקל לזיהוי ע"י ה-YAML ---
         commit_msg = f"GTFS and Schedule Update for {datetime.now().strftime('%Y-%m-%d')}"
-        files_to_commit = f"{OUTPUT_FILENAME},{OUTPUT_SCHEDULE_FILENAME}"
+        files_to_commit = f"{OUTPUT_FILENAME} {OUTPUT_SCHEDULE_FILENAME}"
         
         # הדפסה עם תחילית מזהה (ללא רווחים מיותרים!)
         print(f"ACTION_OUTPUT_COMMIT_MESSAGE:{commit_msg}")
