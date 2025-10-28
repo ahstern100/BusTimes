@@ -7,6 +7,9 @@ on:
   # מאפשר הרצה ידנית מהממשק הגרפי
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   fetch_and_commit:
     name: Running on BusTimes
