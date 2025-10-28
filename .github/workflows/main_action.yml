@@ -46,7 +46,7 @@ jobs:
           FILES_TO_COMMIT=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_FILES_TO_COMMIT:' | sed 's/ACTION_OUTPUT_FILES_TO_COMMIT://')
           
           echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
-          echo "file_pattern=$FILES_TO_COMMIT" >> $GITHUB_OUTPUT
+          # echo "file_pattern=$FILES_TO_COMMIT" >> $GITHUB_OUTPUT
           
           echo "DEBUG: Commit message set: $COMMIT_MSG"
           echo "DEBUG: File pattern set: $FILES_TO_COMMIT"
@@ -55,7 +55,7 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: ${{ steps.run_script.outputs.commit_message }}
-          file_pattern: ${{ steps.run_script.outputs.file_pattern }} 
+          file_pattern: 'gtfs.zip schedule.txt'
           commit_options: '--allow-empty'
           skip_dirty_check: true 
           
