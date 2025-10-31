@@ -44,19 +44,33 @@ if __name__ == '__main__':
         
         # --- שלב חדש: הפעלת קובץ הניתוח ---
         print("\n--- Starting GTFS Parsing and Schedule Generation ---")
+        schedule_generated = False # דגל חדש
+
         try:
-            # הפעלת הפונקציה הראשית מקובץ gtfs_parser.py
             gtfs_parser.generate_schedule(OUTPUT_FILENAME, OUTPUT_SCHEDULE_FILENAME)
-            print("SUCCESS: Schedule generated.")
+            print("INFO: Attempted to generate schedule.")
         except Exception as e:
+            # אם יש שגיאה קשה בקוד עצמו
             print(f"CRITICAL ERROR: Failed to run gtfs_parser: {e}")
         finally:
             print("--- GTFS Parsing Process Finished ---")
 
-        # --- הדפסת המשתנים בפורמט קבוע וקל לזיהוי ע"י ה-YAML ---
-        commit_msg = f"GTFS and Schedule Update for {datetime.now().strftime('%Y-%m-%d')}"
-        files_to_commit = f"{OUTPUT_FILENAME} {OUTPUT_SCHEDULE_FILENAME}"
+        # *** התיקון הקריטי: בדיקה אם הקובץ נוצר ***
+        if os.path.exists(OUTPUT_SCHEDULE_FILENAME):
+            print(f"SUCCESS: {OUTPUT_SCHEDULE_FILENAME} found and ready for commit.")
+            schedule_generated = True
+        else:
+            print(f"WARNING: {OUTPUT_SCHEDULE_FILENAME} was NOT generated. Will only commit gtfs.zip.")
+            
+        # --- הגדרת המשתנים כהדפסה פשוטה לקונסולה ---
+        commit_msg = f"GTFS Update for {datetime.now().strftime('%Y-%m-%d')}"
         
-        # הדפסה עם תחילית מזהה (ללא רווחים מיותרים!)
+        if schedule_generated:
+            # אם שני הקבצים נוצרו
+            files_to_commit = f"{OUTPUT_FILENAME} {OUTPUT_SCHEDULE_FILENAME}"
+        else:
+            # אם רק קובץ ה-ZIP ירד
+            files_to_commit = OUTPUT_FILENAME
+
         print(f"ACTION_OUTPUT_COMMIT_MESSAGE:{commit_msg}")
         print(f"ACTION_OUTPUT_FILES_TO_COMMIT:{files_to_commit}")
