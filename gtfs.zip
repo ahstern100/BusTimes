@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="he"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <title>שגיאה</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <style>
+        * {
+            -webkit-box-sizing:border-box;
+            -moz-box-sizing:border-box;
+            box-sizing:border-box;
+        }
+              body {
+            direction:rtl;
+            text-align:right;
+            height: 100%;
+             font-family:arial;
+              display:flex;
+    margin: 0;
+        }
+        header
+         {
+            height:90px;
+            color:#285c7e;
+        }
+.wra {
+    flex:1 1 auto;
+    display: flex;
+    flex-flow:column nowrap;
+    min-height:100vh;
+}
+article {
+    flex:1 1 auto;
+     margin-top:90px;
+}        
+        @media(min-width:220px){
+            .c {
+                           width: 100%;
+						   padding-right:10px;
+                padding-left:10px;
+				text-align:center;
+            }
+            .h2 {
+                font-size: 32px;
+                 color: #285c7e;
+            }
+            .h4 {
+                font-size: 21px;
+                 color: #285c7e;
+            }
+        }
+        @media(min-width:900px){
+            .c{
+                padding-right:20px;
+                padding-left:20px;
+				
+            }
+            .h4{
+                font-size:20px;
+            }
+            .h2{
+                font-size:38px;
+                           }
+        }
+        .x2{
+            margin-bottom:20px
+        }
+		.x1{
+		margin-right:10px;}
+                        .f1{
+                display:-ms-flexbox;
+                display:-webkit-flex;
+                display:flex;
+                 -ms-flex-direction:row;
+                flex-direction:row;
+               -ms-flex-wrap:nowrap;
+                flex-wrap:nowrap;
+               -ms-flex-pack:flex-start;
+                justify-content:flex-start;
+               -ms-flex-line-pack:stretch;
+                align-content:stretch;
+                -ms-flex-align:center;
+                align-items:center;
+        }
+        .f2{
+            display:-ms-flexbox;
+            display:-webkit-flex;
+            display:flex;
+            -ms-flex-direction:column;
+            flex-direction:column;
+            -ms-flex-wrap:nowrap;
+            flex-wrap:nowrap;
+            -ms-flex-pack:center;
+            justify-content:center;
+            -ms-flex-line-pack:stretch;
+            align-content:stretch;
+            -ms-flex-align:center;
+            align-items:center;
+        }
+    </style>
+</head>
+<body>
+<div class="wra">
+    <header class="f1 c">                   
+            </header>
+    <article>
+        <div class="c">
+            <div class="f2">
+                    <div class="h2 x2">
+                      התוכן המבוקש אינו זמין, אנא צרו קשר עם מנהל המערכת.
+                    </div>
+                    <div class="h4">
+מזהה השגיאה שלך הוא: 3886243777028645104
+                     <br>
+                   </div>
+            </div>
+    </div></article>
+         </div>
+
+</body></html>
