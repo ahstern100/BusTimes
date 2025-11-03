@@ -26,26 +26,24 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies (requests, pandas)
-        # שימו לב: הסרנו urllib3 כי ההורדה נעשית עכשיו ב-cURL
         run: |
           echo "DEBUG: Installing requests and pandas..."
           pip install requests pandas
           echo "DEBUG: Installation complete."
 
-      # *** שלב ההורדה: משתמש ב-cURL במקום ב-Python כדי לעקוף חסימות ***
+      # *** שלב ההורדה: משתמש ב-cURL עם הכתובת ההיסטורית של המשתמש ***
       - name: Download GTFS ZIP using cURL
         id: download_zip
         run: |
-          GTFS_URL="https://gtfs.mot.gov.il/gtfsfiles/gtfs-mot.zip"
+          # *** שינוי קריטי: שימוש בכתובת שהמשתמש מצא שעבדה בעבר ***
+          GTFS_URL="https://gtfs.mot.gov.il/gtfsfiles/israel-public-transportation.zip" 
           OUTPUT_FILENAME="gtfs.zip"
           
           echo "DEBUG: Attempting cURL download..."
-          # -k: לא בודק SSL (נחוץ, למקרה שהתעודה שוב לא תקינה)
-          # -L: עוקב אחר הפניות מחדש
-          # User-Agent: נותן כותרת דפדפן כדי לעקוף חסימת בוטים
+          # שימוש ב-User-Agent ייחודי ומתאים לבוטים (Googlebot)
           curl -k -L --header "User-Agent: Googlebot" -o $OUTPUT_FILENAME $GTFS_URL
           
-          # בדיקה אם ההורדה הצליחה (בדיקת גודל קובץ סביר)
+          # בדיקה אם ההורדה הצליחה
           FILE_SIZE=$(stat -c%s "$OUTPUT_FILENAME")
           if [ "$FILE_SIZE" -lt 1000000 ]; then # קובץ GTFS אמור להיות גדול מ-1MB
               echo "FATAL ERROR: Downloaded file size ($FILE_SIZE bytes) is too small. Probably received an HTML error."
@@ -65,7 +63,7 @@ jobs:
           
           echo "$OUTPUT"
           
-          # חילוץ המשתנים תוך ניקוי רווחים מיותרים (xargs)
+          # חילוץ המשתנים תוך ניקוי רווחים מיותרים
           COMMIT_MSG=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_COMMIT_MESSAGE:' | sed 's/ACTION_OUTPUT_COMMIT_MESSAGE://' | tr -d '\n\r' | xargs)
           FILES_TO_COMMIT=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_FILES_TO_COMMIT:' | sed 's/ACTION_OUTPUT_FILES_TO_COMMIT://' | tr -d '\n\r' | xargs)
           
@@ -77,7 +75,6 @@ jobs:
           echo "DEBUG: File pattern set: $FILES_TO_COMMIT"
       
       - name: Commit files if changed (GTFS.zip and schedule.txt)
-        # ה-Action יבצע Commit רק לקבצים שצוינו ב-file_pattern (שיש בהם תוכן)
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: ${{ steps.run_script.outputs.commit_message }}
