@@ -1,12 +1,14 @@
 name: Daily GTFS Fetch and Schedule Generation
 
 on:
+  # הרצה יומית בשעה 03:00 UTC (06:00 או 05:00 בוקר בישראל)
   schedule:
     - cron: '0 3 * * *'
+  # מאפשר הרצה ידנית מהממשק הגרפי
   workflow_dispatch:
 
 permissions:
-  contents: write 
+  contents: write # הרשאה זו פותרת את שגיאת 403
 
 jobs:
   fetch_and_commit:
@@ -22,17 +24,39 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      
-      # *** הוסר השלב sudo apt-get install -y ca-certificates ***
 
-      - name: Install dependencies (requests, pandas, and urllib3)
-        # התקנת כל הנדרש, כולל urllib3 לדיכוי אזהרות SSL
+      - name: Install dependencies (requests, pandas)
+        # שימו לב: הסרנו urllib3 כי ההורדה נעשית עכשיו ב-cURL
         run: |
-          echo "DEBUG: Installing requests, pandas, and urllib3..."
-          pip install requests pandas urllib3
+          echo "DEBUG: Installing requests and pandas..."
+          pip install requests pandas
           echo "DEBUG: Installation complete."
 
-      - name: Run GTFS Download and Parsing Script and Capture Outputs
+      # *** שלב ההורדה: משתמש ב-cURL במקום ב-Python כדי לעקוף חסימות ***
+      - name: Download GTFS ZIP using cURL
+        id: download_zip
+        run: |
+          GTFS_URL="https://gtfs.mot.gov.il/gtfsfiles/gtfs.zip"
+          OUTPUT_FILENAME="gtfs.zip"
+          
+          echo "DEBUG: Attempting cURL download..."
+          # -k: לא בודק SSL (נחוץ, למקרה שהתעודה שוב לא תקינה)
+          # -L: עוקב אחר הפניות מחדש
+          # User-Agent: נותן כותרת דפדפן כדי לעקוף חסימת בוטים
+          curl -k -L --header "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -o $OUTPUT_FILENAME $GTFS_URL
+          
+          # בדיקה אם ההורדה הצליחה (בדיקת גודל קובץ סביר)
+          FILE_SIZE=$(stat -c%s "$OUTPUT_FILENAME")
+          if [ "$FILE_SIZE" -lt 1000000 ]; then # קובץ GTFS אמור להיות גדול מ-1MB
+              echo "FATAL ERROR: Downloaded file size ($FILE_SIZE bytes) is too small. Probably received an HTML error."
+              cat $OUTPUT_FILENAME # הדפסת התוכן לדיבוג
+              exit 1 
+          fi
+          echo "SUCCESS: GTFS file downloaded via cURL. Size: $FILE_SIZE bytes."
+
+
+      - name: Run GTFS Parsing Script and Capture Outputs
+        # הפעלת הפייתון על הקובץ שהורדנו זה עתה
         id: run_script
         shell: bash
         run: |
@@ -40,26 +64,26 @@ jobs:
           OUTPUT=$(python download_gtfs.py)
           
           echo "$OUTPUT"
-          echo "DEBUG: Script finished."
           
-          # 3. חילוץ המשתנים שהודפסו מה-Python וניקוי רווחים מיותרים
+          # חילוץ המשתנים תוך ניקוי רווחים מיותרים (xargs)
           COMMIT_MSG=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_COMMIT_MESSAGE:' | sed 's/ACTION_OUTPUT_COMMIT_MESSAGE://' | tr -d '\n\r' | xargs)
           FILES_TO_COMMIT=$(echo "$OUTPUT" | grep 'ACTION_OUTPUT_FILES_TO_COMMIT:' | sed 's/ACTION_OUTPUT_FILES_TO_COMMIT://' | tr -d '\n\r' | xargs)
           
+          # כתיבה ל-GITHUB_OUTPUT
           echo "commit_message=$COMMIT_MSG" >> $GITHUB_OUTPUT
-          echo "file_pattern=$FILES_TO_COMMIT" >> $GITHUB_OUTPUT # זה יכיל או 'gtfs.zip schedule.txt' או 'gtfs.zip'
+          echo "file_pattern=$FILES_TO_COMMIT" >> $GITHUB_OUTPUT 
           
           echo "DEBUG: Commit message set: $COMMIT_MSG"
           echo "DEBUG: File pattern set: $FILES_TO_COMMIT"
       
       - name: Commit files if changed (GTFS.zip and schedule.txt)
+        # ה-Action יבצע Commit רק לקבצים שצוינו ב-file_pattern (שיש בהם תוכן)
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: ${{ steps.run_script.outputs.commit_message }}
-          # *** חזרה לשימוש בפלט הפייתון הדינמי ***
           file_pattern: ${{ steps.run_script.outputs.file_pattern }} 
           commit_options: '--allow-empty'
-          skip_dirty_check: true
+          skip_dirty_check: true 
           
       - name: Final Success Check
-        run: echo "SUCCESS - Action completed. Check the 'BusTimes' repository for the updated files."
+        run: echo "SUCCESS: Action completed. Check the 'BusTimes' repository for the updated files."
