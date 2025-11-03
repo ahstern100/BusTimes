@@ -36,14 +36,14 @@ jobs:
       - name: Download GTFS ZIP using cURL
         id: download_zip
         run: |
-          GTFS_URL="https://storage.googleapis.com/transit-feeds/gtfs-mot.zip"
+          GTFS_URL="https://gtfs.mot.gov.il/gtfsfiles/gtfs-mot.zip"
           OUTPUT_FILENAME="gtfs.zip"
           
           echo "DEBUG: Attempting cURL download..."
           # -k: לא בודק SSL (נחוץ, למקרה שהתעודה שוב לא תקינה)
           # -L: עוקב אחר הפניות מחדש
           # User-Agent: נותן כותרת דפדפן כדי לעקוף חסימת בוטים
-          curl -k -L --header "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -o $OUTPUT_FILENAME $GTFS_URL
+          curl -k -L --header "User-Agent: Googlebot" -o $OUTPUT_FILENAME $GTFS_URL
           
           # בדיקה אם ההורדה הצליחה (בדיקת גודל קובץ סביר)
           FILE_SIZE=$(stat -c%s "$OUTPUT_FILENAME")
