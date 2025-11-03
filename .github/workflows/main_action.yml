@@ -36,7 +36,7 @@ jobs:
       - name: Download GTFS ZIP using cURL
         id: download_zip
         run: |
-          GTFS_URL="https://gtfs.mot.gov.il/gtfsfiles/gtfs.zip"
+          GTFS_URL="https://storage.googleapis.com/gtfs-static/gtfs.zip"
           OUTPUT_FILENAME="gtfs.zip"
           
           echo "DEBUG: Attempting cURL download..."
