@@ -86,4 +86,4 @@ jobs:
           skip_dirty_check: true 
           
       - name: Final Success Check
-        run: echo "SUCCESS: Action completed. Check the 'BusTimes' repository for the updated files."
+        run: echo "SUCCESS - Action completed. Check the 'BusTimes' repository for the updated files."
