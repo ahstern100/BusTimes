@@ -1,224 +1,142 @@
-import pandas as pd
 import zipfile
+import csv
 import io
+from collections import defaultdict
 from datetime import datetime
 
-# --- הגדרות משתמש קבועות ---
-# הקווים הרצויים: חשוב להפריד בין קו '20' ל-'20א'
-TARGET_LINES = [
-    '20', '20א', '22', '60', '60א', '71', '71א', 
-    '63', '632', '634', '160', '127', '163', '942'
-]
+# --- הגדרות ---
+# קווים שאתה רוצה לעקוב אחריהם (החלף במספרי הקווים שלך)
+# לדוגמה: אם אתה נוסע בקווי 15 ו-42, שנה לרשימה זו.
+TARGET_ROUTES = ['1', '2', '3'] # אנא שנה לרשימת הקווים שלך! 
+OUTPUT_FILENAME = "schedule.txt"
 
-# קודי התחנות הרצויים (stop_code)
-TARGET_STOP_CODES = [43496, 40571, 40662]
-# -----------------------------
 
-def load_gtfs_files(zip_file_handler):
+def generate_schedule(zip_path, output_path):
     """
-    מתודה לטעינת קבצי ה-GTFS הנדרשים לתוך DataFrame של Pandas.
-    היא מחזירה מילון של ה-DataFrames שנטענו.
+    מעבד קובץ GTFS, מוצא זמני מוצא לקווים נבחרים, ומחלק אותם לפי יום בשבוע.
+    הפלט נכתב ל-schedule.txt.
     """
-    file_list = ['stops.txt', 'routes.txt', 'trips.txt', 'stop_times.txt']
-    loaded_data = {}
-    print("DEBUG: Starting file loading...")
     
+    # 1. מפות נדרשות מתוך קובצי ה-GTFS
+    
+    # route_id -> trip_id (איזה נסיעות שייכות לאיזה קו)
+    trips_for_routes = defaultdict(list)
+    # trip_id -> service_id (איזה נסיעה שייכת לאיזה מועד שירות)
+    service_id_for_trip = {} 
+    # service_id -> days (איזה מועד שירות פעיל באיזה ימים בשבוע)
+    service_days = {} 
+    # (route_id, day_index, stop_id) -> [times] (הלו"ז הסופי)
+    final_schedule = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+
     try:
-        for filename in file_list:
-            print(f"DEBUG: Loading {filename}...")
-            # שימוש ב-TextIOWrapper עבור קריאה מקובץ בתוך ZIP עם קידוד UTF-8
-            loaded_data[filename.replace('.txt', '_df')] = pd.read_csv(
-                io.TextIOWrapper(zip_file_handler.open(filename), encoding='utf-8')
-            )
-            print(f"DEBUG: {filename} loaded successfully with {len(loaded_data[filename.replace('.txt', '_df')])} rows.")
+        with zipfile.ZipFile(zip_path, 'r') as z:
+
+            # --- א. מפה 1: ימים בשבוע (calendar.txt) ---
+            # קובע איזה service_id (מועד שירות) פעיל באיזה ימים
+            print("INFO: Processing calendar.txt...")
+            with z.open('calendar.txt') as f:
+                reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
+                for row in reader:
+                    days = []
+                    # יום ראשון (0) עד שבת (6)
+                    if row['sunday'] == '1': days.append(0)
+                    if row['monday'] == '1': days.append(1)
+                    if row['tuesday'] == '1': days.append(2)
+                    if row['wednesday'] == '1': days.append(3)
+                    if row['thursday'] == '1': days.append(4)
+                    if row['friday'] == '1': days.append(5)
+                    if row['saturday'] == '1': days.append(6)
+                    
+                    service_days[row['service_id']] = days
+                    
+            # --- ב. מפה 2: קווים ונסיעות (routes.txt ו-trips.txt) ---
             
-        return loaded_data
+            # קריאת routes.txt: route_id -> route_short_name (מספר קו)
+            route_id_to_short_name = {}
+            with z.open('routes.txt') as f:
+                 reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
+                 for row in reader:
+                     route_id_to_short_name[row['route_id']] = row['route_short_name']
+
+            # קריאת trips.txt: route_short_name (קו) -> trip_id
+            target_route_ids = set()
+            with z.open('trips.txt') as f:
+                reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
+                for row in reader:
+                    route_short_name = route_id_to_short_name.get(row['route_id'])
+                    
+                    if route_short_name in TARGET_ROUTES:
+                        target_route_ids.add(row['route_id'])
+                        trips_for_routes[route_short_name].append(row['trip_id'])
+                        service_id_for_trip[row['trip_id']] = row['service_id']
+
+            # --- ג. מפה 3: זמני נסיעה (stop_times.txt) ---
+            
+            # קריאת stop_times.txt: מציאת זמני מוצא (תחנה ראשונה בנסיעה)
+            print("INFO: Processing stop_times.txt...")
+            
+            # סט של כל ה-trip_id שאנחנו צריכים לעקוב אחריהם
+            all_target_trips = set(service_id_for_trip.keys())
+            
+            with z.open('stop_times.txt') as f:
+                reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
+                for row in reader:
+                    trip_id = row['trip_id']
+                    
+                    if trip_id in all_target_trips:
+                        # אנחנו רוצים רק את תחנת המוצא
+                        if row['stop_sequence'] == '1': 
+                            
+                            service_id = service_id_for_trip[trip_id]
+                            # ימי השבוע שה-service_id הזה פעיל בהם (0-6)
+                            active_days = service_days.get(service_id, []) 
+                            
+                            # מציאת מספר הקו
+                            route_id = [k for k, v in trips_for_routes.items() if trip_id in v][0]
+
+                            # פורמט זמן (שעתיים:דקות)
+                            departure_time = row['departure_time'][:5] 
+                            
+                            # שמירת הנתונים לפי יום בשבוע
+                            for day_index in active_days:
+                                # מפתח: (קו, יום, קוד_תחנה) -> רשימת זמנים
+                                final_schedule[route_id][day_index][row['stop_id']].append(departure_time)
+
+        # --- 2. כתיבת הפלט לקובץ schedule.txt ---
+        
+        print(f"INFO: Writing final schedule to {output_path}...")
+        
+        with open(output_path, 'w', encoding='utf-8') as outfile:
+            for route_id, schedule_by_day in final_schedule.items():
+                for day_index, schedule_by_stop in schedule_by_day.items():
+                    for stop_id, times in schedule_by_stop.items():
+                        
+                        # סידור זמני המוצא
+                        sorted_times = sorted(times)
+                        times_str = ','.join(sorted_times)
+                        
+                        # הפורמט הסופי: [קו],[קוד_תחנה],[יום_בשבוע]:[זמן],[זמן]...
+                        outfile.write(f"{route_id},{stop_id},{day_index}:{times_str}\n")
+                        
+        print(f"SUCCESS: Schedule generated for {len(final_schedule)} routes.")
+        
     except Exception as e:
-        print(f"CRITICAL ERROR: Failed to load GTFS files: {e}")
-        raise
+        print(f"CRITICAL PARSING ERROR: {e}")
+        # אם נכשל, מוחקים את הקובץ כדי למנוע Commit של קובץ חלקי
+        if os.path.exists(output_path):
+             os.remove(output_path)
+        raise e
 
-def filter_trips(data):
+# --- הפונקציה הראשית שנקראת ע"י download_gtfs.py ---
+def generate_data(zip_path, schedule_path, dates_path=None):
     """
-    מתודה לסינון הנסיעות (Trips) הרלוונטיות:
-    א. ששייכות לקווים המבוקשים (TARGET_LINES).
-    ב. שעוברות באחת התחנות המבוקשות (TARGET_STOP_CODES).
+    Wrapper function to be called by download_gtfs.py.
     """
-    print("DEBUG: Starting trip filtering process...")
-    
-    # 1. סינון קווים
-    target_routes_df = data['routes_df'][
-        data['routes_df']['route_short_name'].astype(str).isin(TARGET_LINES)
-    ]
-    target_route_ids = target_routes_df['route_id'].unique()
-    print(f"DEBUG: Found {len(target_route_ids)} route_ids for target lines.")
-    
-    if not target_route_ids.size:
-        print("WARNING: No matching route_id found for target lines. Returning empty.")
-        return None, None
-        
-    # 2. סינון תחנות (stop_code -> stop_id)
-    target_stops_df = data['stops_df'][
-        data['stops_df']['stop_code'].astype(str).isin([str(c) for c in TARGET_STOP_CODES])
-    ]
-    target_stop_ids = target_stops_df['stop_id'].unique()
-    print(f"DEBUG: Found {len(target_stop_ids)} stop_ids for target stop codes.")
-
-    if not target_stop_ids.size:
-        print("WARNING: No matching stop_id found for target stop codes. Returning empty.")
-        return None, None
-        
-    # 3. מציאת נסיעות שעוצרות בתחנות הרצויות
-    relevant_stop_times = data['stop_times_df'][
-        data['stop_times_df']['stop_id'].isin(target_stop_ids)
-    ]
-    relevant_trip_ids = relevant_stop_times['trip_id'].unique()
-    print(f"DEBUG: Found {len(relevant_trip_ids)} trips passing through target stops.")
-    
-    # 4. חיתוך: נסיעות ששייכות לקווים הרצויים וגם עוברות בתחנות הרצויות
-    final_trips_df = data['trips_df'][
-        data['trips_df']['route_id'].isin(target_route_ids) & 
-        data['trips_df']['trip_id'].isin(relevant_trip_ids)
-    ]
-    
-    if final_trips_df.empty:
-        print("WARNING: No trips found matching BOTH line and stop filters. Returning empty.")
-        return None, None
-
-    print(f"DEBUG: Final filtered trips count: {len(final_trips_df)}")
-    return final_trips_df, target_routes_df
-
-def extract_departure_times(data, final_trips_df, target_routes_df):
-    """
-    מתודה לחילוץ זמני היציאה מתחנת המוצא של הנסיעות המסוננות, והסרת כפילויות.
-    """
-    print("DEBUG: Starting extraction of departure times...")
-    final_trip_ids = final_trips_df['trip_id'].unique()
-
-    # 1. קבלת כל זמני העצירה של הנסיעות המסוננות
-    final_stop_times = data['stop_times_df'][
-        data['stop_times_df']['trip_id'].isin(final_trip_ids)
-    ]
-
-    # 2. מציאת העצירה הראשונה (תחנת המוצא) של כל נסיעה
-    first_stops_df = final_stop_times.loc[
-        final_stop_times.groupby('trip_id')['stop_sequence'].idxmin()
-    ]
-    print(f"DEBUG: Identified first stop for {len(first_stops_df)} trips.")
-
-    # 3. מיזוג נתונים לקבלת שם הקו ושם התחנה
-    
-    # קבלת route_id ושם הקו (route_short_name)
-    result = pd.merge(
-        first_stops_df, 
-        final_trips_df[['trip_id', 'route_id']], 
-        on='trip_id'
-    )
-    result = pd.merge(
-        result,
-        target_routes_df[['route_id', 'route_short_name']],
-        on='route_id'
-    )
-    
-    # קבלת שם התחנה
-    result = pd.merge(
-        result, 
-        data['stops_df'][['stop_id', 'stop_name']],
-        on='stop_id'
-    )
-
-    # 4. הסרת כפילויות (זמני יציאה זהים עבור אותו קו)
-    result_schedule = result[[
-        'route_short_name', 'departure_time', 'stop_id', 'stop_name'
-    ]].copy()
-    
-    initial_count = len(result_schedule)
-    result_schedule.drop_duplicates(
-        subset=['route_short_name', 'departure_time'], 
-        keep='first', 
-        inplace=True
-    )
-    final_count = len(result_schedule)
-    print(f"DEBUG: Removed {initial_count - final_count} duplicate departure times.")
-
-    # 5. סידור וארגון
-    result_schedule.sort_values(
-        by=['route_short_name', 'departure_time'], 
-        inplace=True
-    )
-    
-    print("DEBUG: Extraction and deduplication complete.")
-    return result_schedule
-
-def save_schedule_to_file(schedule_df, output_path):
-    """
-    מתודה לשמירת ה-DataFrame של הלו"ז לקובץ טקסט מסודר.
-    """
-    print(f"DEBUG: Starting save operation to {output_path}")
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(f"--- Bus Departure Schedule Generated on {current_time} ---\n")
-        f.write(f"Target Lines: {', '.join(TARGET_LINES)}\n")
-        f.write(f"Filter Stops (Codes): {', '.join(map(str, TARGET_STOP_CODES))}\n\n")
-        
-        # כתיבה מסודרת של לו"ז לכל קו
-        for line in sorted(schedule_df['route_short_name'].unique()):
-            line_data = schedule_df[schedule_df['route_short_name'] == line]
-            
-            # מציאת תחנת המוצא (היא זהה לכל הנסיעות של אותו קו בתוצאה)
-            origin_stop_name = line_data['stop_name'].iloc[0]
-            origin_stop_id = line_data['stop_id'].iloc[0]
-            
-            f.write(f"** Line {line} **\n")
-            f.write(f"Origin Stop: {origin_stop_name} (ID: {origin_stop_id})\n")
-            
-            # איסוף ופורמט זמני היציאה
-            times = ', '.join(line_data['departure_time'].tolist())
-            f.write(f"Departure Times: {times}\n\n")
-
-    print(f"SUCCESS: Final schedule saved to {output_path}.")
-
-
-def generate_schedule(gtfs_zip_path, output_schedule_path):
-    """
-    המתודה הראשית המשלבת את כל השלבים. זו המתודה שנקראת מתוך download_gtfs.py.
-    """
-    print(f"DEBUG: generate_schedule called for file: {gtfs_zip_path}")
-    
-    try:
-        with zipfile.ZipFile(gtfs_zip_path, 'r') as zf:
-            
-            # 1. טעינת קבצי ה-GTFS
-            data = load_gtfs_files(zf)
-            
-            # 2. סינון נסיעות (Trips)
-            final_trips_df, target_routes_df = filter_trips(data)
-            
-            if final_trips_df is None:
-                print("PROCESS HALTED: No relevant trips found after filtering.")
-                # שמירה של קובץ ריק במקרה של כשלון
-                with open(output_schedule_path, 'w', encoding='utf-8') as f:
-                    f.write("No matching schedules found.")
-                return
-
-            # 3. חילוץ זמני יציאה והסרת כפילויות
-            schedule_df = extract_departure_times(data, final_trips_df, target_routes_df)
-            
-            if schedule_df.empty:
-                print("PROCESS HALTED: Schedule DataFrame is empty after extraction/deduplication.")
-                return
-
-            # 4. שמירת התוצאות לקובץ
-            save_schedule_to_file(schedule_df, output_schedule_path)
-            
-    except zipfile.BadZipFile:
-        print(f"CRITICAL ERROR: The file {gtfs_zip_path} is not a valid ZIP file.")
-    except FileNotFoundError:
-        print(f"CRITICAL ERROR: GTFS file not found at {gtfs_zip_path}.")
-    except Exception as e:
-        print(f"CRITICAL ERROR: An unexpected error occurred in generate_schedule: {e}")
-        raise
+    # קוראים רק לפונקציה שאחראית על יצירת schedule.txt
+    generate_schedule(zip_path, schedule_path)
 
 
 if __name__ == '__main__':
-    print("gtfs_parser.py loaded. This file should be run via download_gtfs.py.")
+    # דוגמה לשימוש מקומי (במקרה שתרצה להריץ על המחשב שלך)
+    # generate_schedule('gtfs.zip', OUTPUT_FILENAME)
+    pass
