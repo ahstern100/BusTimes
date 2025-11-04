@@ -35,16 +35,18 @@ if __name__ == '__main__':
             print(f"SUCCESS: {OUTPUT_SCHEDULE_FILENAME} found and ready for commit.")
             schedule_generated = True
         else:
-            print(f"WARNING: {OUTPUT_SCHEDULE_FILENAME} was NOT generated. Will only commit gtfs.zip.")
+            # אם אין schedule.txt, לא נבצע commit על כלום כדי למנוע שגיאות
+            print(f"WARNING: {OUTPUT_SCHEDULE_FILENAME} was NOT generated. No files will be committed.")
             
         # --- הגדרת המשתנים כהדפסה פשוטה לקונסולה ---
-        commit_msg = f"GTFS Update for {datetime.now().strftime('%Y-%m-%d')}"
+        commit_msg = f"Schedule Update for {datetime.now().strftime('%Y-%m-%d')}"
         
         if schedule_generated:
-            files_to_commit = f"{OUTPUT_FILENAME} {OUTPUT_SCHEDULE_FILENAME}"
+            # *** התיקון הקריטי: אנחנו שולחים רק את schedule.txt! ***
+            files_to_commit = OUTPUT_SCHEDULE_FILENAME
         else:
-            files_to_commit = OUTPUT_FILENAME
-    
-    # הדפסת הפלט שנלכד על ידי ה-YAML
-    print(f"ACTION_OUTPUT_COMMIT_MESSAGE:{commit_msg}")
-    print(f"ACTION_OUTPUT_FILES_TO_COMMIT:{files_to_commit}")
+            # אם שום דבר לא נוצר, נשלח קלט ריק
+            files_to_commit = ""
+
+        print(f"ACTION_OUTPUT_COMMIT_MESSAGE:{commit_msg}")
+        print(f"ACTION_OUTPUT_FILES_TO_COMMIT:{files_to_commit}")
