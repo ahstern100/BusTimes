@@ -24,7 +24,7 @@ def clean_header(header):
 
 
 def debug_print_file_contents(zfile, file_name):
-    # ... (פונקציה זהה) ...
+    """מדפיס את שמות העמודות הנקיות של קובץ CSV בתוך ה-ZIP."""
     try:
         with zfile.open(file_name) as f:
             reader = csv.reader(io.TextIOWrapper(f, encoding='utf-8'))
@@ -44,7 +44,7 @@ def debug_print_file_contents(zfile, file_name):
 
 
 def get_csv_dict_reader(zfile, file_name, cleaned_header):
-    # ... (פונקציה זהה) ...
+    """מחזיר רשימה של שורות (כמילונים) באמצעות הכותרת הנקייה שהכנו."""
     with zfile.open(file_name) as f:
         text_wrapper = io.TextIOWrapper(f, encoding='utf-8')
         next(text_wrapper)
@@ -52,8 +52,18 @@ def get_csv_dict_reader(zfile, file_name, cleaned_header):
         return list(reader)
 
 
+def list_zip_contents(zfile):
+    """*** הפונקציה שחסרה: מדפיס את כל שמות הקבצים בתוך ה-ZIP ומחזיר את הרשימה. ***"""
+    print("--- DEBUG: ZIP Contents ---")
+    file_list = zfile.namelist()
+    for name in file_list:
+        print(f"FILE: {name}")
+    print("---------------------------")
+    return file_list
+
+
 def get_current_day_info():
-    # ... (פונקציה זהה) ...
+    """מחזיר את תאריך היום (YYYYMMDD) ואת אינדקס היום בשבוע (0=Sun, 6=Sat)."""
     today = datetime.today()
     date_str = today.strftime('%Y%m%d')
     day_index = (today.weekday() + 1) % 7
@@ -61,7 +71,7 @@ def get_current_day_info():
 
 
 def map_service_ids_for_today(zfile, current_day_index, zip_contents):
-    # ... (פונקציה זהה) ...
+    """קריאת calendar.txt והחזרת סט של service_ids הפעילים היום."""
     active_service_ids = set()
     calendar_file = 'calendar.txt'
     
@@ -86,8 +96,8 @@ def map_service_ids_for_today(zfile, current_day_index, zip_contents):
 
 def map_stop_info(zfile, zip_contents):
     """
-    *** מעודכן: קורא stops.txt ומייצר מפות דו-כיווניות:
-    1. stop_id -> stop_code
+    קורא stops.txt ומייצר מפות דו-כיווניות:
+    1. stop_id -> stop_code (לצורך פלט)
     2. stop_code -> stop_id (לצורך סינון גיאוגרפי)
     """
     stop_id_to_code = {}
@@ -109,7 +119,6 @@ def map_stop_info(zfile, zip_contents):
         s_code = row['stop_code']
         
         # 1. מפה רגילה (עבור הפלט)
-        # אם stop_code ריק, נשתמש ב-stop_id
         code = s_code if s_code else s_id 
         stop_id_to_code[s_id] = code
 
@@ -123,7 +132,7 @@ def map_stop_info(zfile, zip_contents):
 
 def convert_codes_to_ids(stop_code_to_id):
     """
-    *** חדש: ממיר את CRITICAL_STOP_CODES ל-CRITICAL_STOP_IDS האמיתיים ***
+    ממיר את CRITICAL_STOP_CODES ל-CRITICAL_STOP_IDS האמיתיים.
     """
     converted_ids = set()
     
@@ -150,7 +159,7 @@ def find_relevant_trips_by_stops(zfile, zip_contents):
     
     if not CRITICAL_STOP_IDS:
         print("WARNING: CRITICAL_STOP_IDS is empty after conversion. Proceeding without geographic filtering.")
-        return None # נחזיר None כדי לציין שאין סינון
+        return None 
         
     if stop_times_file not in zip_contents: raise Exception(f"File {stop_times_file} is not in the archive!")
     stop_times_header = debug_print_file_contents(zfile, stop_times_file)
@@ -167,7 +176,9 @@ def find_relevant_trips_by_stops(zfile, zip_contents):
 
 
 def map_trips_for_target_routes(zfile, active_service_ids, relevant_trip_ids, zip_contents):
-    # ... (פונקציה זו זהה ועכשיו עובדת עם ה-relevant_trip_ids המסוננים נכון) ...
+    """
+    ממפה נסיעות (trips) לקווים הממוקדים הפעילים היום ורק אלה הרלוונטיים גיאוגרפית.
+    """
     route_id_to_short_name = {}
     target_trips_to_route = {} 
 
@@ -202,7 +213,9 @@ def map_trips_for_target_routes(zfile, active_service_ids, relevant_trip_ids, zi
 
 
 def extract_stop_times(zfile, target_trips_to_route, stop_id_to_code, zip_contents):
-    # ... (פונקציה זו זהה ועכשיו היא משתמשת ב-stop_id_to_code הנקי) ...
+    """
+    מוצא את שעות המוצא (stop_sequence=1) עבור הנסיעות המסוננות, וממיר ל-stop_code.
+    """
     final_schedule = defaultdict(lambda: defaultdict(list)) 
     all_target_trips = set(target_trips_to_route.keys())
     stop_times_file = 'stop_times.txt'
@@ -230,7 +243,7 @@ def extract_stop_times(zfile, target_trips_to_route, stop_id_to_code, zip_conten
 
 
 def write_final_schedule(final_schedule, output_path):
-    # ... (פונקציה זהה) ...
+    """כתיבת הלו"ז המעובד לקובץ הפלט schedule.txt."""
     print(f"INFO: Writing schedule to {output_path}. Existing file will be overwritten.")
     
     with open(output_path, 'w', encoding='utf-8') as outfile:
@@ -265,7 +278,7 @@ def generate_schedule(zip_path, output_path):
             if not active_service_ids:
                  raise Exception(f"No active service IDs found. No service is scheduled for this day/time frame.")
             
-            # *** תיקון קריטי: שלב 2-3: מיפוי קוד לתעודת זהות ***
+            # שלב 2-3: מיפוי קוד לתעודת זהות
             stop_id_to_code, stop_code_to_id = map_stop_info(zfile, zip_contents)
             
             # המרת הקבועים החיצוניים (Stop Codes) ל-Stop IDs פנימיים
