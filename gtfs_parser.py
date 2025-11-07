@@ -9,13 +9,16 @@ from datetime import datetime
 TARGET_ROUTES = ['20', '20א', '22', '60', '60א', '71', '71א', '631', '632', '634', '63', '163', '160', '127']
 OUTPUT_FILENAME = "schedule.txt"
 
+# *** הקבוע הקריטי לדרישת הסינון הגיאוגרפי שלך ***
+CRITICAL_STOP_IDS = {'43334', '43496', '40662'}
+
 
 def clean_header(header):
     """מנקה BOM, רווחים לבנים ורווחים מובילים/נגררים משמות עמודות."""
     if not header:
         return []
     
-    # 1. ניקוי BOM מראש הרשימה
+    # ניקוי BOM מראש הרשימה
     first_item = header[0].strip().lstrip('\ufeff')
     cleaned_header = [first_item] + [h.strip() for h in header[1:]]
     
@@ -23,8 +26,9 @@ def clean_header(header):
 
 
 def debug_print_file_contents(zfile, file_name):
-    """מדפיס את שמות העמודות (Header) הנקיות של קובץ CSV בתוך ה-ZIP."""
+    """מדפיס את שמות העמודות הנקיות של קובץ CSV בתוך ה-ZIP."""
     try:
+        # פתיחה ראשונית לקריאת ה-Header בלבד
         with zfile.open(file_name) as f:
             reader = csv.reader(io.TextIOWrapper(f, encoding='utf-8'))
             header = next(reader, None)
@@ -46,10 +50,9 @@ def debug_print_file_contents(zfile, file_name):
 
 
 def get_csv_dict_reader(zfile, file_name, cleaned_header):
-    """מחזיר DictReader באמצעות הכותרת הנקייה שהכנו."""
-    # אנחנו צריכים לקרוא שוב את הקובץ מהתחלה, אבל להשתמש בכותרת הנקייה
+    """מחזיר רשימה של שורות (כמילונים) באמצעות הכותרת הנקייה שהכנו."""
+    # קריאת הקובץ מהתחלה
     with zfile.open(file_name) as f:
-        # קריאת הקובץ כטקסט
         text_wrapper = io.TextIOWrapper(f, encoding='utf-8')
         
         # דילוג על שורת ה-Header המקורית
@@ -57,7 +60,7 @@ def get_csv_dict_reader(zfile, file_name, cleaned_header):
         
         # שימוש ב-DictReader עם הכותרת הנקייה שלנו
         reader = csv.DictReader(text_wrapper, fieldnames=cleaned_header)
-        return list(reader) # קריאה מלאה לזיכרון (עבור פייתון 3)
+        return list(reader)
 
 
 def list_zip_contents(zfile):
@@ -79,12 +82,12 @@ def get_current_day_info():
 
 
 def map_service_ids_for_today(zfile, current_day_index, zip_contents):
-    """קריאת calendar.txt והחזרת סט של service_ids הפעילים היום, לפי יום בשבוע."""
+    """קריאת calendar.txt והחזרת סט של service_ids הפעילים היום."""
+    # (הקוד הזה עבד בהצלחה בגלל תיקון ה-BOM)
     active_service_ids = set()
     calendar_file = 'calendar.txt'
     
     if calendar_file not in zip_contents: raise Exception(f"File {calendar_file} is not in the archive!")
-    
     header = debug_print_file_contents(zfile, calendar_file)
     if not header or 'service_id' not in header:
         raise Exception(f"Header check failed for {calendar_file}. 'service_id' column is missing.")
@@ -92,12 +95,7 @@ def map_service_ids_for_today(zfile, current_day_index, zip_contents):
     day_map = {0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday', 5: 'friday', 6: 'saturday'}
     current_day_column = day_map.get(current_day_index)
     
-    if current_day_column not in header:
-         raise Exception(f"Header check failed for {calendar_file}. Column '{current_day_column}' is missing.")
-         
     print(f"INFO: Processing {calendar_file} to map active service IDs based on column '{current_day_column}'.")
-    
-    # שימוש ב-DictReader מותאם אישית
     calendar_data = get_csv_dict_reader(zfile, calendar_file, header)
     
     for row in calendar_data:
@@ -108,24 +106,51 @@ def map_service_ids_for_today(zfile, current_day_index, zip_contents):
     return active_service_ids
 
 
-def map_trips_for_target_routes(zfile, active_service_ids, zip_contents):
-    """ממפה נסיעות (trips) לקווים הממוקדים הפעילים היום."""
+def find_relevant_trips_by_stops(zfile, zip_contents):
+    """
+    *** חדש: ממפה רק Trips שעוברים באחת מהתחנות הקריטיות שהגדרת ***
+    """
+    relevant_trip_ids = set()
+    stop_times_file = 'stop_times.txt'
+    
+    if not CRITICAL_STOP_IDS:
+        print("WARNING: CRITICAL_STOP_IDS is empty. All trips will be considered potentially relevant.")
+        return None # נחזיר None כדי לציין שאין סינון
+        
+    if stop_times_file not in zip_contents: raise Exception(f"File {stop_times_file} is not in the archive!")
+    stop_times_header = debug_print_file_contents(zfile, stop_times_file)
+    
+    if 'trip_id' not in stop_times_header or 'stop_id' not in stop_times_header:
+         raise Exception(f"Header check failed for {stop_times_file}. Missing trip_id or stop_id.")
+
+    print(f"INFO: Filtering trips by critical stop IDs: {CRITICAL_STOP_IDS}")
+    stop_times_data = get_csv_dict_reader(zfile, stop_times_file, stop_times_header)
+
+    for row in stop_times_data:
+        if row['stop_id'] in CRITICAL_STOP_IDS:
+            relevant_trip_ids.add(row['trip_id'])
+            
+    print(f"DEBUG: Identified {len(relevant_trip_ids)} trips that pass through the critical stops.")
+    return relevant_trip_ids
+
+
+def map_trips_for_target_routes(zfile, active_service_ids, relevant_trip_ids, zip_contents):
+    """
+    *** מעודכן: ממפה נסיעות (trips) לקווים הממוקדים הפעילים היום ורק אלה הרלוונטיים גיאוגרפית. ***
+    """
     route_id_to_short_name = {}
     target_trips_to_route = {} 
-    
-    # --- routes.txt ---
+
+    # --- 1. routes.txt ---
     routes_file = 'routes.txt'
-    if routes_file not in zip_contents: raise Exception(f"File {routes_file} is not in the archive!")
     routes_header = debug_print_file_contents(zfile, routes_file)
-    
     print(f"INFO: Mapping route IDs from {routes_file}.")
     routes_data = get_csv_dict_reader(zfile, routes_file, routes_header)
     for row in routes_data:
         route_id_to_short_name[row['route_id']] = row['route_short_name']
 
-    # --- trips.txt ---
+    # --- 2. trips.txt ---
     trips_file = 'trips.txt'
-    if trips_file not in zip_contents: raise Exception(f"File {trips_file} is not in the archive!")
     trips_header = debug_print_file_contents(zfile, trips_file)
 
     print(f"INFO: Mapping trips for target routes active today from {trips_file}.")
@@ -133,58 +158,99 @@ def map_trips_for_target_routes(zfile, active_service_ids, zip_contents):
     for row in trips_data:
         route_short_name = route_id_to_short_name.get(row['route_id'])
         service_id = row['service_id']
+        trip_id = row['trip_id']
         
+        # שלב 1: סינון לפי קו ופעילות יום
         if route_short_name in TARGET_ROUTES and service_id in active_service_ids:
-            target_trips_to_route[row['trip_id']] = route_short_name
+            
+            # שלב 2: סינון גיאוגרפי
+            if relevant_trip_ids is None or trip_id in relevant_trip_ids:
+                target_trips_to_route[trip_id] = route_short_name
 
-    print(f"DEBUG: Identified {len(target_trips_to_route)} relevant trips.")
+    print(f"DEBUG: Identified {len(target_trips_to_route)} relevant trips after filtering by stops.")
     return target_trips_to_route
 
 
-def extract_stop_times(zfile, target_trips_to_route, zip_contents):
-    """מוצא את זמני המוצא (stop_sequence=1) עבור הנסיעות הרלוונטיות."""
+def map_stop_codes(zfile, zip_contents):
+    """קורא stops.txt ומייצר מפה מ-stop_id ל-stop_code."""
+    # (פונקציה זו זהה)
+    stop_id_to_code = {}
+    stops_file = 'stops.txt'
+    
+    if stops_file not in zip_contents: 
+        print(f"WARNING: {stops_file} not found. Cannot map stop codes.")
+        return stop_id_to_code
+        
+    stops_header = debug_print_file_contents(zfile, stops_file)
+    if 'stop_id' not in stops_header or 'stop_code' not in stops_header:
+        print(f"WARNING: Required columns missing in {stops_file}. Cannot map stop codes.")
+        return stop_id_to_code
+
+    print(f"INFO: Mapping stop IDs to stop codes from {stops_file}.")
+    stops_data = get_csv_dict_reader(zfile, stops_file, stops_header)
+    
+    for row in stops_data:
+        # מוודא ש-stop_code אינו ריק
+        code = row['stop_code'] if row['stop_code'] else row['stop_id'] 
+        stop_id_to_code[row['stop_id']] = code
+        
+    print(f"DEBUG: Mapped {len(stop_id_to_code)} stops.")
+    return stop_id_to_code
+
+
+def extract_stop_times(zfile, target_trips_to_route, stop_id_to_code, zip_contents):
+    """
+    מוצא את שעות המוצא (stop_sequence=1) עבור הנסיעות המסוננות, וממיר ל-stop_code.
+    """
     final_schedule = defaultdict(lambda: defaultdict(list)) 
     all_target_trips = set(target_trips_to_route.keys())
     stop_times_file = 'stop_times.txt'
     
     if stop_times_file not in zip_contents: raise Exception(f"File {stop_times_file} is not in the archive!")
     stop_times_header = debug_print_file_contents(zfile, stop_times_file)
-
-    print(f"INFO: Extracting times from {stop_times_file}...")
+    
+    print(f"INFO: Extracting departure times (stop_sequence=1) for {len(all_target_trips)} trips.")
     stop_times_data = get_csv_dict_reader(zfile, stop_times_file, stop_times_header)
 
     for row in stop_times_data:
         trip_id = row['trip_id']
         
+        # רק נסיעות שעברו את הסינון
         if trip_id in all_target_trips:
+            # אנחנו מחפשים רק את תחנת המוצא (שעליה דיברת)
             if row['stop_sequence'] == '1': 
                 
                 route_short_name = target_trips_to_route[trip_id]
                 departure_time = row['departure_time'][:5] # HH:MM
+                stop_id = row['stop_id']
+                
+                # המרה מ-stop_id ל-stop_code
+                output_stop_code = stop_id_to_code.get(stop_id, stop_id)
 
-                final_schedule[route_short_name][row['stop_id']].append(departure_time)
+                final_schedule[route_short_name][output_stop_code].append(departure_time)
                 
     return final_schedule
 
 
 def write_final_schedule(final_schedule, output_path):
-    # ... (קוד זהה לקוד הקודם) ...
+    """כתיבת הלו"ז המעובד לקובץ הפלט schedule.txt."""
     print(f"INFO: Writing schedule to {output_path}. Existing file will be overwritten.")
     
     with open(output_path, 'w', encoding='utf-8') as outfile:
         for route_id, schedule_by_stop in final_schedule.items():
-            for stop_id, times in schedule_by_stop.items():
+            for stop_code, times in schedule_by_stop.items():
                 
                 sorted_times = sorted(times)
                 times_str = ','.join(sorted_times)
                 
-                outfile.write(f"{route_id},{stop_id}:{times_str}\n")
+                # כותבים Route Short Name, Stop Code, ושעות יציאה
+                outfile.write(f"{route_id},{stop_code}:{times_str}\n")
                     
     print(f"SUCCESS: Schedule generated and written for {len(final_schedule)} routes.")
 
 
 # -----------------------------------------------------------------
-# הפונקציה הראשית (נקראת ע"י download_gtfs.py)
+# הפונקציה הראשית
 # -----------------------------------------------------------------
 
 def generate_schedule(zip_path, output_path):
@@ -195,25 +261,30 @@ def generate_schedule(zip_path, output_path):
         
         with zipfile.ZipFile(zip_path, 'r') as zfile:
             
-            # שלב 1: דיבוג תוכן ה-ZIP
             zip_contents = list_zip_contents(zfile)
             
-            # 2. מציאת ה-Service IDs הפעילים היום
+            # שלב 1: מציאת ה-Service IDs הפעילים היום
             active_service_ids = map_service_ids_for_today(zfile, current_day_index, zip_contents)
             
             if not active_service_ids:
                  raise Exception(f"No active service IDs found. No service is scheduled for this day/time frame.")
             
-            # 3. מציאת הנסיעות (Trips) הרלוונטיות
-            target_trips_to_route = map_trips_for_target_routes(zfile, active_service_ids, zip_contents)
+            # שלב 2: סינון גיאוגרפי - מציאת ה-Trips שעוברים בתחנות הקריטיות
+            relevant_trip_ids = find_relevant_trips_by_stops(zfile, zip_contents)
+            
+            # שלב 3: מיפוי Stop ID ל-Stop Code
+            stop_id_to_code = map_stop_codes(zfile, zip_contents)
+            
+            # שלב 4: מציאת הנסיעות (Trips) הרלוונטיות לאחר סינון כפול (קו + גיאוגרפיה)
+            target_trips_to_route = map_trips_for_target_routes(zfile, active_service_ids, relevant_trip_ids, zip_contents)
             
             if not target_trips_to_route:
-                raise Exception(f"No relevant trips found for target routes today.")
+                raise Exception(f"No relevant trips found for target routes today. Check that the routes are active and pass through the critical stops.")
             
-            # 4. משיכת זמני המוצא
-            final_schedule = extract_stop_times(zfile, target_trips_to_route, zip_contents)
+            # שלב 5: משיכת שעות המוצא
+            final_schedule = extract_stop_times(zfile, target_trips_to_route, stop_id_to_code, zip_contents)
             
-            # 5. שמירת הפלט
+            # שלב 6: שמירת הפלט
             write_final_schedule(final_schedule, output_path)
 
     except Exception as e:
