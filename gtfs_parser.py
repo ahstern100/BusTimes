@@ -9,41 +9,42 @@ from datetime import datetime
 TARGET_ROUTES = ['20', '20א', '22', '60', '60א', '71', '71א', '631', '632', '634', '63', '163', '160', '127']
 OUTPUT_FILENAME = "schedule.txt"
 
-
-def list_zip_contents(zfile):
-    """מדפיס את כל שמות הקבצים בתוך ה-ZIP לדיבוג ומחזיר את הרשימה."""
-    print("--- DEBUG: ZIP Contents ---")
-    file_list = zfile.namelist()
-    for name in file_list:
-        print(f"FILE: {name}")
-    print("---------------------------")
-    return file_list
+# הקבצים הקריטיים שהלוגים חשפו
+CALENDAR_FILE = 'calendar.txt' 
+ROUTES_FILE = 'routes.txt'
+TRIPS_FILE = 'trips.txt'
+STOP_TIMES_FILE = 'stop_times.txt'
 
 
-def get_current_date_info():
-    """מחזיר את תאריך היום בפורמט YYYYMMDD."""
+def get_current_day_info():
+    """מחזיר את תאריך היום (YYYYMMDD) ואת אינדקס היום בשבוע (0=Sun, 6=Sat)."""
     today = datetime.today()
     date_str = today.strftime('%Y%m%d')
-    day_index = (today.weekday() + 1) % 7
+    # חישוב: 0=ראשון, 6=שבת
+    day_index = (today.weekday() + 1) % 7 
     return date_str, day_index
 
 
-def map_service_ids_for_today(zfile, today_date_str, calendar_dates_file):
+def map_service_ids_for_today(zfile, current_day_index):
     """
-    קריאת קובץ נתוני הפעילות (שמועבר כארגומנט) והחזרת סט של service_ids הפעילים היום.
+    קריאת calendar.txt והחזרת סט של service_ids הפעילים היום, לפי יום בשבוע.
     """
     active_service_ids = set()
     
-    print(f"INFO: Processing {calendar_dates_file} to map active service IDs.")
+    # מיפוי אינדקס היום לעמודה המתאימה ב-calendar.txt
+    day_map = {0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday', 5: 'friday', 6: 'saturday'}
+    current_day_column = day_map.get(current_day_index)
     
-    # בגלל שבדקנו את קיום הקובץ בפונקציה הראשית, אנחנו בטוחים שהוא קיים
-    with zfile.open(calendar_dates_file) as f:
+    print(f"INFO: Processing {CALENDAR_FILE} to map active service IDs based on column '{current_day_column}'.")
+    
+    with zfile.open(CALENDAR_FILE) as f:
         reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
         for row in reader:
-            if row['date'] == today_date_str and row['exception_type'] == '1':
+            # בדיקה קריטית: האם ה-Service ID פעיל ביום זה (עמודה = '1')
+            if row.get(current_day_column) == '1':
                 active_service_ids.add(row['service_id'])
-        
-    print(f"DEBUG: Found {len(active_service_ids)} active service IDs for {today_date_str}.")
+                
+    print(f"DEBUG: Found {len(active_service_ids)} active service IDs for day index {current_day_index}.")
     return active_service_ids
 
 
@@ -53,15 +54,15 @@ def map_trips_for_target_routes(zfile, active_service_ids):
     target_trips_to_route = {} 
 
     # 1. מפה routes.txt
-    print("INFO: Mapping route IDs to short names.")
-    with zfile.open('routes.txt') as f:
+    print(f"INFO: Mapping route IDs from {ROUTES_FILE}.")
+    with zfile.open(ROUTES_FILE) as f:
          reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
          for row in reader:
              route_id_to_short_name[row['route_id']] = row['route_short_name']
 
     # 2. מפה trips.txt
-    print("INFO: Mapping trips for target routes active today.")
-    with zfile.open('trips.txt') as f:
+    print(f"INFO: Mapping trips for target routes active today from {TRIPS_FILE}.")
+    with zfile.open(TRIPS_FILE) as f:
         reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
         for row in reader:
             route_short_name = route_id_to_short_name.get(row['route_id'])
@@ -79,9 +80,9 @@ def extract_stop_times(zfile, target_trips_to_route):
     final_schedule = defaultdict(lambda: defaultdict(list)) 
     all_target_trips = set(target_trips_to_route.keys())
     
-    print(f"INFO: Extracting times from stop_times.txt...")
+    print(f"INFO: Extracting times from {STOP_TIMES_FILE}...")
 
-    with zfile.open('stop_times.txt') as f:
+    with zfile.open(STOP_TIMES_FILE) as f:
         reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
         for row in reader:
             trip_id = row['trip_id']
@@ -120,40 +121,27 @@ def write_final_schedule(final_schedule, output_path):
 def generate_schedule(zip_path, output_path):
     """פונקציית Wrapper המשלבת את כל שלבי הפארסינג."""
     try:
-        today_date_str, current_day_index = get_current_date_info()
-        print(f"DEBUG: Processing for date {today_date_str}. Day index: {current_day_index}.")
+        today_date_str, current_day_index = get_current_day_info()
+        print(f"DEBUG: Processing for date {today_date_str}. Day index: {current_day_index} (0=Sun).")
         
         with zipfile.ZipFile(zip_path, 'r') as zfile:
             
-            # שלב 1: דיבוג וזיהוי קובץ הלוחות
-            zip_contents = list_zip_contents(zfile)
-            
-            # ניסיון לזהות את קובץ הלוחות הפעיל
-            calendar_date_candidates = [f for f in zip_contents if 'calendar' in f and f.endswith('.txt')]
-            
-            if not calendar_date_candidates:
-                 raise Exception("Cannot find any file containing 'calendar' to determine active services.")
-            
-            # נבחר את הקובץ הסביר ביותר (בדרך כלל calendar_dates.txt או הראשון ברשימה)
-            calendar_dates_file = calendar_date_candidates[0]
-            print(f"DEBUG: Auto-detected calendar file: {calendar_dates_file}")
-
-            # 2. מציאת ה-Service IDs הפעילים היום
-            active_service_ids = map_service_ids_for_today(zfile, today_date_str, calendar_dates_file)
+            # שלב 1: מציאת ה-Service IDs הפעילים היום (באמצעות calendar.txt)
+            active_service_ids = map_service_ids_for_today(zfile, current_day_index)
             
             if not active_service_ids:
-                 raise Exception(f"No active service IDs found for {today_date_str}. Check GTFS dates or target routes.")
+                 raise Exception(f"No active service IDs found for day index {current_day_index}. This usually means no service is scheduled for this day/time frame.")
             
-            # 3. מציאת הנסיעות (Trips) הרלוונטיות
+            # 2. מציאת הנסיעות (Trips) הרלוונטיות
             target_trips_to_route = map_trips_for_target_routes(zfile, active_service_ids)
             
             if not target_trips_to_route:
-                raise Exception(f"No relevant trips found for target routes today.")
+                raise Exception(f"No relevant trips found for target routes today. Check that route numbers are correct and have trips scheduled.")
             
-            # 4. משיכת זמני המוצא
+            # 3. משיכת זמני המוצא
             final_schedule = extract_stop_times(zfile, target_trips_to_route)
             
-            # 5. שמירת הפלט
+            # 4. שמירת הפלט
             write_final_schedule(final_schedule, output_path)
 
     except Exception as e:
