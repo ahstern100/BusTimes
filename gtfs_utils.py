@@ -229,18 +229,18 @@ def write_final_schedule(final_schedule, output_path):
     
     with open(output_path, 'w', encoding='utf-8') as outfile:
         for route_id, schedule_by_stop in final_schedule.items():
-            # ניקוי Route ID
             cleaned_route_id = route_id.strip() 
 
             for stop_code, times in schedule_by_stop.items():
                 
-                # ניקוי Stop Code
                 cleaned_stop_code = stop_code.strip() 
                 
                 sorted_times = sorted(times)
+                # שעות היציאה נשארות מופרדות בפסיקים: 00:00,05:50,...
                 times_str = ','.join(sorted_times)
                 
-                # כותבים Route Short Name, פסיק, Stop Code, ושעות יציאה
-                outfile.write(f"{cleaned_route_id},{cleaned_stop_code}:{times_str}\n")
+                # *** התיקון הקריטי: מעבר משימוש בפסיק ל-Pipe כתו מפריד ראשי ***
+                # הפורמט החדש: [Route_Short_Name]|[Stop_Code]:[Times]
+                outfile.write(f"{cleaned_route_id}|{cleaned_stop_code}:{times_str}\n")
                     
     print(f"SUCCESS: Schedule generated and written for {len(final_schedule)} routes.")
