@@ -93,31 +93,37 @@ def map_service_ids_for_today(zfile, current_day_index, zip_contents):
 
 
 def map_stop_info(zfile, zip_contents):
-    """מייצר מפות דו-כיווניות: stop_id -> stop_code ו-stop_code -> stop_id."""
-    stop_id_to_code = {}
+    """
+    *** מעודכן: מייצר מפות דו-כיווניות, כולל stop_name. ***
+    1. stop_id -> {stop_code, stop_name} (לצורך פלט)
+    2. stop_code -> stop_id (לצורך סינון גיאוגרפי)
+    """
+    stop_id_to_info = {} # מחזיק את המידע המלא (קוד ושם)
     stop_code_to_id = {}
     stops_file = 'stops.txt'
     
     stops_header = debug_print_file_contents(zfile, stops_file)
-    if not stops_header or 'stop_id' not in stops_header or 'stop_code' not in stops_header:
+    if not stops_header or 'stop_id' not in stops_header or 'stop_code' not in stops_header or 'stop_name' not in stops_header:
         raise Exception(f"Required columns missing in {stops_file}. Cannot process stops.")
 
-    print(f"INFO: Mapping stop IDs and codes from {stops_file}.")
+    print(f"INFO: Mapping stop IDs, codes, and names from {stops_file}.")
     stops_data = get_csv_dict_reader(zfile, stops_file, stops_header)
     
     for row in stops_data:
         s_id = row['stop_id']
         s_code = row['stop_code']
+        s_name = row['stop_name'].strip() # ניקוי שם התחנה
         
+        # 1. מפה רגילה (עבור הפלט): stop_id -> {stop_code, stop_name}
         code = s_code if s_code else s_id 
-        stop_id_to_code[s_id] = code
+        stop_id_to_info[s_id] = {'code': code, 'name': s_name}
 
+        # 2. מפה הפוכה (עבור הסינון)
         if s_code:
             stop_code_to_id[s_code] = s_id
         
-    print(f"DEBUG: Mapped {len(stop_id_to_code)} stops. Found {len(stop_code_to_id)} unique stop codes.")
-    return stop_id_to_code, stop_code_to_id
-
+    print(f"DEBUG: Mapped {len(stop_id_to_info)} stops. Found {len(stop_code_to_id)} unique stop codes.")
+    return stop_id_to_info, stop_code_to_id
 
 def convert_codes_to_ids(stop_code_to_id):
     """ממיר את CRITICAL_STOP_CODES ל-CRITICAL_STOP_IDS האמיתיים."""
@@ -196,9 +202,13 @@ def map_trips_for_target_routes(zfile, active_service_ids, relevant_trip_ids, zi
     return target_trips_to_route
 
 
-def extract_stop_times(zfile, target_trips_to_route, stop_id_to_code, zip_contents):
-    """מוצא את שעות המוצא (stop_sequence=1) עבור הנסיעות המסוננות."""
-    final_schedule = defaultdict(lambda: defaultdict(list)) 
+def extract_stop_times(zfile, target_trips_to_route, stop_id_to_info, zip_contents):
+    """
+    *** מעודכן: מוצא את שעות המוצא ומשייך ל-Route Short Name ול-{Stop Code, Stop Name}. ***
+    """
+    # המבנה של final_schedule:
+    # { 'RouteName': { 'StopID': { 'code': 'XXX', 'name': 'YYY', 'times': [...] } } }
+    final_schedule = defaultdict(lambda: {}) 
     all_target_trips = set(target_trips_to_route.keys())
     stop_times_file = 'stop_times.txt'
     stop_times_header = debug_print_file_contents(zfile, stop_times_file)
@@ -216,31 +226,41 @@ def extract_stop_times(zfile, target_trips_to_route, stop_id_to_code, zip_conten
                 departure_time = row['departure_time'][:5]
                 stop_id = row['stop_id']
                 
-                output_stop_code = stop_id_to_code.get(stop_id, stop_id)
-
-                final_schedule[route_short_name][output_stop_code].append(departure_time)
+                # משיכת המידע המלא על התחנה
+                stop_info = stop_id_to_info.get(stop_id)
+                
+                if stop_info:
+                    # שימוש ב-Stop ID כמפתח פנימי למניעת כפילויות של Stop Code
+                    if stop_id not in final_schedule[route_short_name]:
+                        final_schedule[route_short_name][stop_id] = {
+                            'code': stop_info['code'],
+                            'name': stop_info['name'],
+                            'times': []
+                        }
+                    
+                    final_schedule[route_short_name][stop_id]['times'].append(departure_time)
                 
     return final_schedule
 
-
 def write_final_schedule(final_schedule, output_path):
-    """כתיבת הלו"ז המעובד לקובץ הפלט schedule.txt. כולל תיקון ה-strip לפורמט."""
+    """
+    *** מעודכן: כתיבת הפלט בפורמט: [Route_Short_Name]|[Stop_Code]|[Stop_Name]:[Times] ***
+    """
     print(f"INFO: Writing schedule to {output_path}. Existing file will be overwritten.")
     
     with open(output_path, 'w', encoding='utf-8') as outfile:
-        for route_id, schedule_by_stop in final_schedule.items():
+        for route_id, schedule_by_id in final_schedule.items():
             cleaned_route_id = route_id.strip() 
 
-            for stop_code, times in schedule_by_stop.items():
+            for stop_id, info in schedule_by_id.items():
                 
-                cleaned_stop_code = stop_code.strip() 
+                cleaned_stop_code = info['code'].strip() 
+                cleaned_stop_name = info['name'].strip() # ודא ששם התחנה נקי מרווחים
                 
-                sorted_times = sorted(times)
-                # שעות היציאה נשארות מופרדות בפסיקים: 00:00,05:50,...
+                sorted_times = sorted(info['times'])
                 times_str = ','.join(sorted_times)
                 
-                # *** התיקון הקריטי: מעבר משימוש בפסיק ל-Pipe כתו מפריד ראשי ***
-                # הפורמט החדש: [Route_Short_Name]|[Stop_Code]:[Times]
-                outfile.write(f"{cleaned_route_id}|{cleaned_stop_code}:{times_str}\n")
+                # הפורמט החדש: RouteID|StopCode|StopName:Times
+                outfile.write(f"{cleaned_route_id}|{cleaned_stop_code}|{cleaned_stop_name}:{times_str}\n")
                     
     print(f"SUCCESS: Schedule generated and written for {len(final_schedule)} routes.")
