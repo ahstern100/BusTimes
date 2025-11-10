@@ -31,15 +31,15 @@ def load_config_data():
     # קריאת קווים
     lines_list = []
     if 'LINES' in config:
-        # קורא את כל המפתחות בסקשן 'LINES' כרשימה, ומנקה רווחים
+        # קורא את כל המפתחות (ה-Keys, שהם מספרי הקווים) בסקשן 'LINES'
         lines_list = [key.strip() for key in config['LINES'].keys() if key.strip()]
         
     # קריאת קודי תחנות
     stop_codes_set = set()
     if 'STOP_CODES' in config:
-        # קורא את כל המפתחות בסקשן 'STOP_CODES' כסט, ומנקה רווחים
+        # קורא את כל המפתחות (ה-Keys, שהם קודי התחנות) בסקשן 'STOP_CODES'
         stop_codes_set = {key.strip() for key in config['STOP_CODES'].keys() if key.strip()}
-
+    
     # עדכון המשתנים הגלובליים
     global TARGET_ROUTES
     global CRITICAL_STOP_CODES
