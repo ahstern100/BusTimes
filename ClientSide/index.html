@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>זמני אוטובוסים</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>לוח זמני אוטובוסים</h1>
+        
+        <div id="controlsContainer">
+            <button id="clearCacheBtn" title="מחק נתונים מקומיים והורד מחדש">
+                <i class="fas fa-sync-alt"></i> </button>
+            <div id="statusMessage" class="hidden"></div> </div>
+    </header>
+
+    <main>
+        <div class="control-group">
+            <label for="routeSelect">בחר קו:</label>
+            <select id="routeSelect"></select>
+        </div>
+
+        <div id="stopInfo">
+            <p id="stopNameDisplay"></p>
+            <p id="stopCodeDisplay"></p>
+        </div>
+
+        <div id="timesContainer">
+             <ul id="timesList"></ul>
+        </div>
+        
+    </main>
+
+    <div class="debug-container">
+        <button id="copyLogBtn">העתק יומן דיבוג</button>
+        <h2>יומן דיבוג:</h2>
+        <div id="debugConsole"></div>
+    </div>
+
+    <script src="schedule.js"></script>
+</body>
+</html>
