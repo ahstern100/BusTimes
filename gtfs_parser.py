@@ -16,12 +16,20 @@ from gtfs_utils import (
     CRITICAL_STOP_CODES # ייבוא קבועים קריטיים
 )
 
-def generate_schedule(zip_path, output_path):
-    """פונקציית Wrapper המשלבת את כל שלבי הפארסינג."""
-    try:
+def generate_schedule(zip_path, output_path, day_info=None):
+    """
+    פונקציית Wrapper המשלבת את כל שלבי הפארסינג.
+    מקבלת day_info כאובייקט כדי לתמוך בשימוש חוזר לימים שונים.
+    """
+    # אם day_info לא סופק (שימוש רגיל), מביאה את נתוני היום הנוכחי
+    if day_info is None:
         today_date_str, current_day_index = get_current_day_info()
-        print(f"DEBUG: Processing for date {today_date_str}. Day index: {current_day_index} (0=Sun).")
+    else:
+        # שימוש בנתונים שסופקו מהקובץ החיצוני
+        today_date_str, current_day_index = day_info
         
+    try:
+        print(f"DEBUG: Processing for date {today_date_str}. Day index: {current_day_index} (0=Sun).")        
         # --- הגדרות קבועות (כדי שיהיו גלובליות לכל הפונקציות) ---
         # הפונקציה convert_codes_to_ids משנה את המשתנה הגלובלי CRITICAL_STOP_IDS בתוך gtfs_utils
 
@@ -67,6 +75,3 @@ def generate_schedule(zip_path, output_path):
         except:
             pass
         raise e
-
-def generate_data(zip_path, schedule_path, dates_path=None):
-    generate_schedule(zip_path, schedule_path)
