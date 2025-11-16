@@ -13,24 +13,37 @@
         
         <div id="controlsContainer">
             <button id="clearCacheBtn" title="מחק נתונים מקומיים והורד מחדש">
-                <i class="fas fa-sync-alt"></i> </button>
-            <div id="statusMessage" class="hidden"></div> </div>
+                <i class="fas fa-sync-alt"></i> 
+            </button>
+            <div id="statusMessage" class="hidden"></div> 
+        </div>
     </header>
 
     <main>
-        <div class="control-group">
-            <label for="routeSelect">בחר קו:</label>
-            <select id="routeSelect"></select>
-        </div>
+        <section id="daySelection">
+            <h2>בחר יום:</h2>
+            <div id="dayButtonsContainer">
+                </div>
+        </section>
 
-        <div id="stopInfo">
-            <p id="stopNameDisplay"></p>
-            <p id="stopCodeDisplay"></p>
-        </div>
+        <section id="routeSelection">
+            <h2>בחר קו:</h2>
+            <div id="routeButtonsContainer">
+                </div>
+        </section>
 
-        <div id="timesContainer">
-             <ul id="timesList"></ul>
-        </div>
+        <section id="stopSelection">
+            <h2>תחנת מוצא:</h2>
+            <div id="stopButtonsContainer">
+                </div>
+        </section>
+        
+        <section id="scheduleDisplay">
+            <div id="timesContainer">
+                <h3>זמני יציאה:</h3>
+                <ul id="timesList"></ul>
+            </div>
+        </section>
         
     </main>
 
@@ -40,6 +53,10 @@
         <div id="debugConsole"></div>
     </div>
 
-    <script src="schedule.js"></script>
+    <script src="utils.js"></script>
+    <script src="data_process.js"></script>
+    <script src="time_display.js"></script>
+    <script src="ui_logic.js"></script>
+    <script src="data_fetch.js"></script> 
 </body>
 </html>
